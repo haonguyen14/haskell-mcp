@@ -6,12 +6,14 @@
 {-# LANGUAGE TypeOperators #-}
 
 module Server
-  ( mcpServer,
-    JSONRpc,
+  ( initApplication,
+    API,
     MCPRegistry (..),
+    OAuthConfig (..),
   )
 where
 
+import Auth (authMiddleware, fetchJWKS)
 import Control.Applicative ((<|>))
 import Control.Monad.IO.Class (liftIO)
 import Data.Aeson (FromJSON (parseJSON), KeyValue ((.=)), Result (..), ToJSON (toJSON), Value, fromJSON, object)
@@ -38,21 +40,41 @@ instance FromJSON McpMessage where
 
 type JSONRpc = "mcp" :> ReqBody '[JSON] McpMessage :> UVerb 'POST '[JSON] '[WithStatus 200 Value, WithStatus 202 NoContent]
 
+type API =
+  JSONRpc
+    :<|> ".well-known" :> "oauth-protected-resource" :> Get '[JSON] Value
+
+data OAuthConfig = OAuthConfig
+  { issueUrl :: Text,
+    audience :: Text
+  }
+
 data MCPRegistry = MCPRegistry
   { serverInfo :: ServerInfo,
     serverInstruction :: Text,
     prompts :: [SomePrompt],
     tools :: [SomeTool],
-    resources :: [SomeResource]
+    resources :: [SomeResource],
+    oauthConfig :: Maybe OAuthConfig
   }
 
-mcpServer :: MCPRegistry -> Server JSONRpc
-mcpServer = requestHandler
+mcpHandlers :: MCPRegistry -> Server API
+mcpHandlers registry = requestHandler registry :<|> protectedResourceHandler registry
 
 type HandlerResult = Handler (Union '[WithStatus 200 Value, WithStatus 202 NoContent])
 
 ok :: (ToJSON a) => a -> HandlerResult
 ok = respond . WithStatus @200 . toJSON
+
+protectedResourceHandler :: MCPRegistry -> Handler Value
+protectedResourceHandler registry = case oauthConfig registry of
+  Just config ->
+    return $
+      object
+        [ "resource" .= audience config,
+          "authorization_servers" .= [issueUrl config]
+        ]
+  Nothing -> throwError err404
 
 requestHandler :: MCPRegistry -> McpMessage -> HandlerResult
 requestHandler _ (McpNotification _) = respond (WithStatus @202 NoContent)
@@ -180,3 +202,11 @@ toolsCallMethod r req =
           resId = reqId req,
           resResult = Left $ ResponseError code msg
         }
+
+initApplication :: MCPRegistry -> IO Application
+initApplication r = case oauthConfig r of
+  Nothing ->
+    return $ serve (Proxy :: Proxy API) (mcpHandlers r)
+  Just cfg -> do
+    jwks <- fetchJWKS (issueUrl cfg)
+    return $ authMiddleware jwks (audience cfg) (serve (Proxy :: Proxy API) (mcpHandlers r))

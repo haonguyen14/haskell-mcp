@@ -25,6 +25,13 @@ dependencies:
 - text
 - servant-server
 - warp
+- jose
+- http-client
+- http-client-tls
+- bytestring
+- wai
+- http-types
+- mtl
 
 ghc-options:
 - -Wall
@@ -51,6 +58,7 @@ executables:
     dependencies:
     - haskell-mcp
     - servant-server
+    - warp-tls
 
 tests:
   haskell-mcp-test:

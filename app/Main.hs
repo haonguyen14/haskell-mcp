@@ -10,11 +10,13 @@ import Data.Aeson (FromJSON (parseJSON), KeyValue ((.=)), object, withObject, (.
 import Data.Text (Text, pack)
 import GHC.Generics (Generic)
 import McpTypes
-import Network.Wai.Handler.Warp (run)
-import Servant (Proxy (..), serve)
+import Network.Wai.Handler.Warp (defaultSettings, setPort)
+import Network.Wai.Handler.WarpTLS (runTLS, tlsSettings)
 import Prompt
 import Resource
+import Servant (Proxy (..), serve)
 import Server
+import Server (initApplication)
 import Tool
 
 -- Echo tool: returns whatever message the caller sends
@@ -104,7 +106,6 @@ instance PromptCapability SummarizePrompt where
       }
 
   runPrompt _ (SummarizeArgs t) =
-
     PromptMessage
       { role = User,
         content = PromptText ("Please provide a concise summary of: " <> t)
@@ -125,9 +126,10 @@ instance ResourceCapability GreetingResource where
       }
 
   readResource _ =
-    pure $ ResourceReadResult
-      [ ResourceText "text://greeting" (Just "text/plain") "Hello from haskell-mcp!"
-      ]
+    pure $
+      ResourceReadResult
+        [ ResourceText "text://greeting" (Just "text/plain") "Hello from haskell-mcp!"
+        ]
 
 registry :: MCPRegistry
 registry =
@@ -142,11 +144,20 @@ registry =
       serverInstruction = "Send JSON-RPC requests to /mcp",
       prompts = [SomePrompt SummarizePrompt],
       tools = [SomeTool EchoTool, SomeTool AddTool],
-      resources = [SomeResource GreetingResource]
+      resources = [SomeResource GreetingResource],
+      oauthConfig =
+        Just $
+          OAuthConfig
+            { issueUrl = "https://hnguyen.auth0.com/",
+              audience = "https://localhost:8443"
+            }
     }
 
 main :: IO ()
 main = do
-  let port = 8080
-  putStrLn ("Starting on port " ++ show port)
-  run port (serve (Proxy :: Proxy JSONRpc) (mcpServer registry))
+  putStrLn "Starting MCP server on port 8443 (HTTPS)..."
+  app <- initApplication registry
+  runTLS
+    (tlsSettings "cert.pem" "key.pem")
+    (setPort 8443 defaultSettings)
+    app

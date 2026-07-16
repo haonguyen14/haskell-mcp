@@ -25,3 +25,4 @@ cabal.project.local~
 .claude/
 CLAUDE.md
 Features.md
+*.pem

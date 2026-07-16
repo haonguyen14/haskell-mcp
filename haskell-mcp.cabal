@@ -25,6 +25,7 @@ source-repository head
 
 library
   exposed-modules:
+      Auth
       McpTypes
       Prompt
       Resource
@@ -41,8 +42,15 @@ library
   build-depends:
       aeson
     , base >=4.7 && <5
+    , bytestring
+    , http-client
+    , http-client-tls
+    , http-types
+    , jose
+    , mtl
     , servant-server
     , text
+    , wai
     , warp
   default-language: Haskell2010
 
@@ -58,10 +66,18 @@ executable haskell-mcp-exe
   build-depends:
       aeson
     , base >=4.7 && <5
+    , bytestring
     , haskell-mcp
+    , http-client
+    , http-client-tls
+    , http-types
+    , jose
+    , mtl
     , servant-server
     , text
+    , wai
     , warp
+    , warp-tls
   default-language: Haskell2010
 
 test-suite haskell-mcp-test
@@ -77,8 +93,15 @@ test-suite haskell-mcp-test
   build-depends:
       aeson
     , base >=4.7 && <5
+    , bytestring
     , haskell-mcp
+    , http-client
+    , http-client-tls
+    , http-types
+    , jose
+    , mtl
     , servant-server
     , text
+    , wai
     , warp
   default-language: Haskell2010
