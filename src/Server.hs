@@ -34,7 +34,7 @@ import Prompt (PromptGetParams (..), SomePrompt, callSomePrompt, somePromptMetad
 import Resource (ResourceReadParams (..), SomeResource, readSomeResource, someResourceMetadata, someResourceUri)
 import Servant
 import Tool (SomeTool, ToolCallParams (..), callSomeTool, someToolMetadata, someToolName)
-import Types (JsonRpcError (..), McpMethod (..), Notification, Request (..), Response (..), ResponseError (..), UserCtx, defaultResponse)
+import Types (JsonRpcError (..), McpMethod (..), Notification (..), Request (..), Response (..), ResponseError (..), UserCtx, defaultResponse)
 
 data McpMessage
   = McpRequest Request
