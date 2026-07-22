@@ -30,6 +30,7 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Text.Encoding (encodeUtf8)
 import qualified Data.Vault.Lazy as VaultL
+import System.IO (hPutStrLn, stderr)
 import qualified Network.HTTP.Client as HC
 import Network.HTTP.Client.TLS (newTlsManager)
 import Network.HTTP.Types (status401)
@@ -90,15 +91,23 @@ authMiddleware jwks aud app req respond
   | isPublicPath (rawPathInfo req) = app req respond
   | otherwise =
       case extractBearer req of
-        Nothing -> sendUnauthorized
+        Nothing -> do
+          hPutStrLn stderr "[auth] rejected: no bearer token"
+          sendUnauthorized
         Just token -> do
           result <- validateToken jwks aud token
           case result of
-            Left _ -> sendUnauthorized
+            Left err -> do
+              hPutStrLn stderr $ "[auth] rejected: " <> show err
+              sendUnauthorized
             Right claims ->
               let mCtx = UserCtx <$> extractSub claims
                   v = maybe id (VaultL.insert userCtxKey) mCtx (vault req)
-               in app (req {vault = v}) respond
+              in do
+                case mCtx of
+                  Nothing -> hPutStrLn stderr "[auth] warning: token valid but sub claim missing"
+                  Just ctx -> hPutStrLn stderr $ "[auth] ok sub=" <> T.unpack (sub ctx)
+                app (req {vault = v}) respond
   where
     sendUnauthorized =
       respond $
