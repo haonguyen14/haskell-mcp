@@ -33,6 +33,7 @@ import Data.Aeson
   )
 import Data.Text (Text)
 import GHC.Generics (Generic)
+import Types (UserCtx)
 
 data ToolMetadata = ToolMetadata
   { name :: Text,
@@ -79,7 +80,7 @@ class (FromJSON (Input a)) => ToolCapability a where
   type Input a
 
   getMetadata :: a -> ToolMetadata
-  runTool :: a -> Input a -> IO ToolResult
+  runTool :: Maybe UserCtx -> a -> Input a -> IO ToolResult
 
 data SomeTool where
   SomeTool :: (ToolCapability a) => a -> SomeTool
@@ -91,7 +92,7 @@ someToolName :: SomeTool -> Text
 someToolName (SomeTool t) = case getMetadata t of
   ToolMetadata {name = n} -> n
 
-callSomeTool :: SomeTool -> Value -> IO (Either String ToolResult)
-callSomeTool (SomeTool t) args = case fromJSON args of
+callSomeTool :: SomeTool -> Maybe UserCtx -> Value -> IO (Either String ToolResult)
+callSomeTool (SomeTool t) ctx args = case fromJSON args of
   Error e -> return $ Left e
-  Success input -> Right <$> runTool t input
+  Success input -> Right <$> runTool ctx t input

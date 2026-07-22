@@ -32,6 +32,8 @@ dependencies:
 - wai
 - http-types
 - mtl
+- lens
+- vault
 
 ghc-options:
 - -Wall

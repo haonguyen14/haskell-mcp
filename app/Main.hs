@@ -42,7 +42,7 @@ instance ToolCapability EchoTool where
             ]
       }
 
-  runTool _ (EchoInput msg) = pure $ ToolResult [ToolText msg] False
+  runTool _ _ (EchoInput msg) = pure $ ToolResult [ToolText msg] False
 
 -- Add tool: adds two integers
 
@@ -71,7 +71,7 @@ instance ToolCapability AddTool where
             ]
       }
 
-  runTool _ (AddInput x y) =
+  runTool _ _ (AddInput x y) =
     let result = x + y
      in pure $ ToolResult [ToolText (mconcat [showT x, " + ", showT y, " = ", showT result])] False
     where

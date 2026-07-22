@@ -3,21 +3,24 @@
 module Auth
   ( fetchJWKS,
     authMiddleware,
+    userCtxKey,
   )
 where
 
 import Control.Exception (throwIO)
+import Control.Lens ((^.))
 import Control.Monad.Except (runExceptT)
 import Crypto.JOSE.JWK (JWKSet)
 import Crypto.JWT
   ( ClaimsSet,
     JWTError,
     StringOrURI,
-    defaultJWTValidationSettings,
+    claimSub,
     decodeCompact,
+    defaultJWTValidationSettings,
     verifyClaims,
   )
-import Data.Aeson (FromJSON (parseJSON), Result (..), Value (..), eitherDecode, fromJSON, withObject, (.:))
+import Data.Aeson (FromJSON (parseJSON), Result (..), Value (..), eitherDecode, fromJSON, toJSON, withObject, (.:))
 import Data.Aeson.Key (fromText)
 import qualified Data.Aeson.KeyMap as KM
 import qualified Data.ByteString as BS
@@ -26,10 +29,17 @@ import Data.String (fromString)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Text.Encoding (encodeUtf8)
+import qualified Data.Vault.Lazy as VaultL
 import qualified Network.HTTP.Client as HC
 import Network.HTTP.Client.TLS (newTlsManager)
 import Network.HTTP.Types (status401)
 import Network.Wai
+import System.IO.Unsafe (unsafePerformIO)
+import Types (UserCtx (..))
+
+{-# NOINLINE userCtxKey #-}
+userCtxKey :: VaultL.Key UserCtx
+userCtxKey = unsafePerformIO VaultL.newKey
 
 newtype ASMetadata = ASMetadata {jwksUri :: Text}
 
@@ -85,7 +95,10 @@ authMiddleware jwks aud app req respond
           result <- validateToken jwks aud token
           case result of
             Left _ -> sendUnauthorized
-            Right _ -> app req respond
+            Right claims ->
+              let mCtx = UserCtx <$> extractSub claims
+                  v = maybe id (VaultL.insert userCtxKey) mCtx (vault req)
+               in app (req {vault = v}) respond
   where
     sendUnauthorized =
       respond $
@@ -98,6 +111,13 @@ authMiddleware jwks aud app req respond
             )
           ]
           "Unauthorized"
+
+extractSub :: ClaimsSet -> Maybe Text
+extractSub claims = do
+  sou <- claims ^. claimSub
+  case toJSON sou of
+    String t -> Just t
+    _ -> Nothing
 
 isPublicPath :: BS.ByteString -> Bool
 isPublicPath = BS.isPrefixOf "/.well-known/"

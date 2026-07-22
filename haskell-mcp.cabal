@@ -47,9 +47,11 @@ library
     , http-client-tls
     , http-types
     , jose
+    , lens
     , mtl
     , servant-server
     , text
+    , vault
     , wai
     , warp
   default-language: Haskell2010
@@ -72,9 +74,11 @@ executable haskell-mcp-exe
     , http-client-tls
     , http-types
     , jose
+    , lens
     , mtl
     , servant-server
     , text
+    , vault
     , wai
     , warp
     , warp-tls
@@ -99,9 +103,11 @@ test-suite haskell-mcp-test
     , http-client-tls
     , http-types
     , jose
+    , lens
     , mtl
     , servant-server
     , text
+    , vault
     , wai
     , warp
   default-language: Haskell2010

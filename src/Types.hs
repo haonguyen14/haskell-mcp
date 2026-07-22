@@ -9,6 +9,7 @@ module Types
     Response (..),
     ResponseError (..),
     Notification (..),
+    UserCtx (..),
     defaultRequest,
     defaultResponse,
   )
@@ -56,25 +57,25 @@ data McpMethod
   deriving (Eq, Show)
 
 instance ToJSON McpMethod where
-  toJSON Initialize        = toJSON ("initialize" :: Text)
-  toJSON ToolsList         = toJSON ("tools/list" :: Text)
-  toJSON ToolsCall         = toJSON ("tools/call" :: Text)
-  toJSON ResourcesList     = toJSON ("resources/list" :: Text)
-  toJSON ResourcesRead     = toJSON ("resources/read" :: Text)
-  toJSON PromptsList       = toJSON ("prompts/list" :: Text)
-  toJSON PromptsGet        = toJSON ("prompts/get" :: Text)
+  toJSON Initialize = toJSON ("initialize" :: Text)
+  toJSON ToolsList = toJSON ("tools/list" :: Text)
+  toJSON ToolsCall = toJSON ("tools/call" :: Text)
+  toJSON ResourcesList = toJSON ("resources/list" :: Text)
+  toJSON ResourcesRead = toJSON ("resources/read" :: Text)
+  toJSON PromptsList = toJSON ("prompts/list" :: Text)
+  toJSON PromptsGet = toJSON ("prompts/get" :: Text)
   toJSON (UnknownMethod m) = toJSON m
 
 instance FromJSON McpMethod where
-  parseJSON (String "initialize")      = pure Initialize
-  parseJSON (String "tools/list")      = pure ToolsList
-  parseJSON (String "tools/call")      = pure ToolsCall
-  parseJSON (String "resources/list")  = pure ResourcesList
-  parseJSON (String "resources/read")  = pure ResourcesRead
-  parseJSON (String "prompts/list")    = pure PromptsList
-  parseJSON (String "prompts/get")     = pure PromptsGet
-  parseJSON (String m)                 = pure $ UnknownMethod m
-  parseJSON _                          = fail "method must be a string"
+  parseJSON (String "initialize") = pure Initialize
+  parseJSON (String "tools/list") = pure ToolsList
+  parseJSON (String "tools/call") = pure ToolsCall
+  parseJSON (String "resources/list") = pure ResourcesList
+  parseJSON (String "resources/read") = pure ResourcesRead
+  parseJSON (String "prompts/list") = pure PromptsList
+  parseJSON (String "prompts/get") = pure PromptsGet
+  parseJSON (String m) = pure $ UnknownMethod m
+  parseJSON _ = fail "method must be a string"
 
 data Request = Request
   { reqJsonRpc :: Text,
@@ -118,17 +119,17 @@ data JsonRpcError
   deriving (Show, Eq)
 
 instance ToJSON JsonRpcError where
-  toJSON MethodNotFound   = toJSON (-32601 :: Integer)
-  toJSON InvalidParams    = toJSON (-32602 :: Integer)
-  toJSON InternalError    = toJSON (-32603 :: Integer)
-  toJSON (CustomError n)  = toJSON n
+  toJSON MethodNotFound = toJSON (-32601 :: Integer)
+  toJSON InvalidParams = toJSON (-32602 :: Integer)
+  toJSON InternalError = toJSON (-32603 :: Integer)
+  toJSON (CustomError n) = toJSON n
 
 instance FromJSON JsonRpcError where
   parseJSON (Number n) = pure $ case round n of
     -32601 -> MethodNotFound
     -32602 -> InvalidParams
     -32603 -> InternalError
-    c      -> CustomError c
+    c -> CustomError c
   parseJSON _ = fail "error code must be a number"
 
 data ResponseError = ResponseError
@@ -189,3 +190,7 @@ defaultResponse id' result =
       resId = id',
       resResult = Right (toJSON result)
     }
+
+data UserCtx = UserCtx
+  { sub :: Text
+  }

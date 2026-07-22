@@ -1,8 +1,12 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 
 module Server
@@ -13,7 +17,10 @@ module Server
   )
 where
 
-import Auth (authMiddleware, fetchJWKS)
+import Auth (authMiddleware, fetchJWKS, userCtxKey)
+import qualified Data.Vault.Lazy as VaultL
+import Network.Wai (vault)
+import Servant.Server.Internal (addParameterCheck, withRequest)
 import Control.Applicative ((<|>))
 import Control.Monad.IO.Class (liftIO)
 import Data.Aeson (FromJSON (parseJSON), KeyValue ((.=)), Result (..), ToJSON (toJSON), Value, fromJSON, object)
@@ -26,7 +33,7 @@ import Prompt (PromptGetParams (..), SomePrompt, callSomePrompt, somePromptMetad
 import Resource (ResourceReadParams (..), SomeResource, readSomeResource, someResourceMetadata, someResourceUri)
 import Servant
 import Tool (SomeTool, ToolCallParams (..), callSomeTool, someToolMetadata, someToolName)
-import Types (JsonRpcError (..), McpMethod (..), Notification, Request (..), Response (..), ResponseError (..), defaultResponse)
+import Types (JsonRpcError (..), McpMethod (..), Notification, Request (..), Response (..), ResponseError (..), UserCtx, defaultResponse)
 
 data McpMessage
   = McpRequest Request
@@ -38,7 +45,18 @@ instance FromJSON McpMessage where
     (McpRequest <$> parseJSON x)
       <|> (McpNotification <$> parseJSON x)
 
-type JSONRpc = "mcp" :> ReqBody '[JSON] McpMessage :> UVerb 'POST '[JSON] '[WithStatus 200 Value, WithStatus 202 NoContent]
+data UserCtxParam
+
+instance (HasServer api ctx) => HasServer (UserCtxParam :> api) ctx where
+  type ServerT (UserCtxParam :> api) m = Maybe UserCtx -> ServerT api m
+  hoistServerWithContext _ pc nt s = hoistServerWithContext (Proxy @api) pc nt . s
+  route Proxy ctx delayed =
+    route (Proxy @api) ctx $
+      addParameterCheck delayed $
+        withRequest $ \req ->
+          return $ VaultL.lookup userCtxKey (vault req)
+
+type JSONRpc = UserCtxParam :> "mcp" :> ReqBody '[JSON] McpMessage :> UVerb 'POST '[JSON] '[WithStatus 200 Value, WithStatus 202 NoContent]
 
 type API =
   JSONRpc
@@ -76,12 +94,12 @@ protectedResourceHandler registry = case oauthConfig registry of
         ]
   Nothing -> throwError err404
 
-requestHandler :: MCPRegistry -> McpMessage -> HandlerResult
-requestHandler _ (McpNotification _) = respond (WithStatus @202 NoContent)
-requestHandler r (McpRequest req) = case reqMethod req of
+requestHandler :: MCPRegistry -> Maybe UserCtx -> McpMessage -> HandlerResult
+requestHandler _ _ (McpNotification _) = respond (WithStatus @202 NoContent)
+requestHandler r ctx (McpRequest req) = case reqMethod req of
   Initialize -> ok (initializeMethod r req)
   ToolsList -> ok (toolsListMethod r req)
-  ToolsCall -> liftIO (toolsCallMethod r req) >>= ok
+  ToolsCall -> liftIO (toolsCallMethod r ctx req) >>= ok
   ResourcesList -> ok (resourcesListMethod r req)
   ResourcesRead -> liftIO (resourcesReadMethod r req) >>= ok
   PromptsList -> ok (promptsListMethod r req)
@@ -181,8 +199,8 @@ toolsListMethod r req =
   defaultResponse (reqId req) $
     object ["tools" .= map someToolMetadata (tools r)]
 
-toolsCallMethod :: MCPRegistry -> Request -> IO Response
-toolsCallMethod r req =
+toolsCallMethod :: MCPRegistry -> Maybe UserCtx -> Request -> IO Response
+toolsCallMethod r ctx req =
   case reqParams req of
     Nothing -> return $ errorResponse InvalidParams "Missing params"
     Just params -> case fromJSON params of
@@ -191,7 +209,7 @@ toolsCallMethod r req =
         case find (\t -> someToolName t == callName) (tools r) of
           Nothing -> return $ errorResponse MethodNotFound "Tool not found"
           Just t -> do
-            result <- callSomeTool t (fromMaybe (object []) mArgs)
+            result <- callSomeTool t ctx (fromMaybe (object []) mArgs)
             case result of
               Left e -> return $ errorResponse InternalError (pack e)
               Right tr -> return $ defaultResponse (reqId req) tr
